@@ -1,0 +1,914 @@
+---
+title: <b>PRA 2 Limpieza y Validación de los Datos</b>
+author: "Diego Armando Quintero (diegoquintero424) -- \n Adrian Felipe Pinzon Hurtado (apinzonh)"
+date: " Fecha: Enero 2022"
+output:
+  html_document:
+    code_folding: hide
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+    includes:
+    in_header: LOGO_2_HEADER.html
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  word_document: default
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=T, echo=T)
+library(corrplot)
+library("plotly")
+library("ggplot2")
+library("gridExtra")
+library(C50)
+library(caret)
+###############
+library(stringr)
+library(readxl)
+library(dplyr)
+library(quanteda)
+library(tm)
+library(ggplot2)
+library(topicmodels)
+library(tidytext)
+library(ggplot2)
+library(stringdist)
+library(sqldf)
+library(lattice)
+library(survival)
+library(Formula)
+library(Hmisc)
+library(lubridate)
+library(MASS)
+library(tidyverse)
+library(data.table)
+library(VIM)
+#install.packages("ResourceSelection")
+library(knitr)
+library(gridExtra)
+library(grid)
+library(kableExtra)
+library(magrittr)
+library(xtable)
+library(tidyr)
+library(hms)
+#install.packages("ggpubr")
+library(ggpubr)
+library(reshape2)
+#install.packages("PASWR")
+library(PASWR)
+library(car)
+#knitr::opts_chunk$set(echo = TRUE)
+library(GGally)
+library(faraway)
+library(epiR)
+library(ResourceSelection)
+library(ROCR)
+#library(xlsx)
+
+
+```
+
+
+******
+# <b>Descripción del Dataset</b>
+
+
+## Presentación y problemática (desafío)
+
+(tomado de https://www.kaggle.com/c/titanic)
+El hundimiento del Titanic es uno de los naufragios más infames de la historia.
+
+El 15 de abril de 1912, durante su viaje inaugural, el RMS Titanic, ampliamente considerado "insumergible", se hundió después de chocar con un iceberg. Desafortunadamente, no había suficientes botes salvavidas para todos a bordo, lo que resultó en la muerte de 1502 de los 2224 pasajeros y la tripulación.
+
+Si bien hubo algún elemento de suerte involucrado en sobrevivir, parece que algunos grupos de personas tenían más probabilidades de sobrevivir que otros.
+
+En este desafío, le pedimos que cree un modelo predictivo que responda a la pregunta: "¿Qué tipo de personas tenían más probabilidades de sobrevivir?" utilizando datos de pasajeros (es decir, nombre, edad, sexo, clase socioeconómica, etc.).
+
+
+
+##  Exploración de dataset, variables y extracción visual de información
+
+Carga de los datos - Tres archivos:
+
+
+```{r ,include=FALSE, message= FALSE, warning=FALSE}
+data<-read.csv("./Test.csv",header=T,sep=",")
+data1<-read.csv("./Train.csv",header=T,sep=",")
+data2<-read.csv("./gender_submission.csv",header=T,sep=",")
+attach(data)
+attach(data1)
+attach(data2)
+
+```
+
+
+Obtenemos que disponemos de:
+
+
+```{r, include=FALSE, message= FALSE, warning=FALSE}
+message("Data Test")
+dim(data)
+message("Data Train")
+dim(data1)
+message("Data Gender_submission")
+dim(data2)
+```
+
+```{r, echo=FALSE}
+tabla_vc_ve <- data.frame(
+  Datas = c(
+    "Test",
+    "Train",
+    "gender_submission"
+  ),
+  Registros = c(
+    "418",
+    "891",
+    "418"
+  ),
+  
+  Variables = c(
+    "11 variables (columnas)",
+    "12 variables (columnas)",
+    "2 variables (columnas)"
+  ))
+
+kable(tabla_vc_ve,caption = "TABLA RESUMEN ARCHIVOS") %>%
+  kable_styling(fixed_thead = T)%>%
+  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+#  column_spec(4, bold = T, color = "gray", background = "#A1E9FF") %>%
+#   column_spec(5, bold = T, color = "gray", background = "#18D6F3") %>%
+    add_footnote(c("Realizado con funciones dim() y str()"), notation = "symbol")
+
+```
+
+
+¿Cuáles son esas variables? Gracias a la función str() sabemos que las  variables son categóricas o discretas, es decir, toman valores en un conjunto finito. 
+
+```{r, include=FALSE,warning=FALSE}
+str(data)
+```
+
+```{r, echo=FALSE}
+text_tbl <- data.frame(
+  Variable = c(
+    "PassengerId",
+    "Pclass",
+    "Name",
+    "Sex",
+    "Age",
+    "SibSp",
+    "Parch",
+    "Ticket",
+    "Fare",
+    "Cabin",
+    "Embarked"
+
+  ),
+  Descripcion = c(
+    "(tipo entero) Identificación del pasajero. Ej.: 892, 893. Variable continua",
+    "(tipo entero) Clase del pasajero. Ej.: 3,2. Variable Discreta",
+    "(tipo factor) 418 niveles. Nombre del pasajero. Ej.: 'Abbott, Master. Eugene Joseph'",
+    "(tipo factor) 2 niveles. Sexo del pasajero. Ej.: female, male. Variable categoríca",
+    "(tipo número). Edad del pasajero.  Ej.: 34, 47 Variable discreta",
+    "(tipo entero). Ej.: 0,1 Variable Discreta",
+    "(tipo entero). Ej.: 0,1 Variable discreta",
+    "(tipo factor) 363 niveles. Tiquetes. Ej.: 110469, 110489. Variable categoríca",
+    "(tipo número) Tarifas. Ej.: 7.83, 9.69 Variable continua",
+    "(tipo factor) 77 niveles Cabina en la que estaba el pasajero. Ej.: A11, A18 Variable categoríca",
+    "(tipo factor) 3 niveles. Tipo de emarque del pasajero. Ej.: C, Q Variable categoríca."
+  ))
+
+kable(text_tbl,caption = "TABLA RESUMEN VARIABLES DATA 'TEST'") %>%
+  kable_styling(latex_options="scale_down", position = "left") %>%
+  row_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  row_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  row_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+  row_spec(4, bold = T, color = "gray", background = "#B9EFFF") %>%
+  row_spec(5, bold = T, color = "gray", background = "#A1E9FF") %>%
+  row_spec(6, bold = T, color = "white", background = "#49CFF7") %>%
+  row_spec(7, bold = T, color = "white", background = "#11C3F9") %>%
+  row_spec(8, bold = T, color = "white", background = "#0E9CC7") %>%
+  row_spec(9, bold = T, color = "white", background = "#147F9F") %>%
+  row_spec(10, bold = T, color = "white", background = "#156077") %>%
+  row_spec(11, bold = T, color = "white", background = "#156077") %>%
+  add_footnote(c("Esta es la salida del código hecho con read.table"), notation = "symbol")
+```
+
+```{r, include=FALSE,warning=FALSE}
+str(data1)
+```
+
+```{r, echo=FALSE}
+tabla_vt <- data.frame(
+  Variable = c(
+    "PassengerId",
+    "Survived",
+    "Pclass",
+    "Name",
+    "Sex",
+    "Age",
+    "SibSp",
+    "Parch",
+    "Ticket",
+    "Fare",
+    "Cabin",
+    "Embarked"
+
+  ),
+  Descripcion = c(
+    "(tipo entero) Identificación del pasajero. Ej.: 1, 2, 3...Variable continua",
+    "(tipo entero) Si sobrevivió o no. Ej.: 0, 1. Variable dicotómica discreta",
+    "(tipo entero) Clase del pasajero. Ej.: 1, 3,2. Variable Discreta",
+    "(tipo factor) 891 niveles. Nombre del pasajero. Ej.: 'Abbing, Mr. Anthony' Variable categoríca",
+    "(tipo factor) 2 niveles. Sexo del pasajero. Ej.: female, male. Variable categórica",
+    "(tipo número). Edad del pasajero.  Ej.: 34, 47, NA. Variable Discreta",
+    "(tipo entero). Ej.: 0,1,2. Variable Discreta",
+    "(tipo entero). Ej.: 0,1,2. Variable Discreta",
+    "(tipo factor) 681 niveles. Tiquetes. Ej.:'110152','110413',..:.524, 597 Variable categórica",
+    "(tipo número) Tarifas. Ej.: 7.25, 71.28. Variable continua",
+    "(tipo factor) 148 niveles Cabina en la que estaba el pasajero. Ej.: 'A10', 'A14': ..: 1 83...Variable categoríca",
+    "(tipo factor)  4 niveles. Tipo de emarque del pasajero. Ej.: 'C','Q','S': 4 2 4 4... Variable categoríca"
+  ))
+
+kable(tabla_vt,caption = "TABLA RESUMEN VARIABLES DATA 'TRAIN'") %>%
+  kable_styling(latex_options="scale_down", position = "left") %>%
+  row_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  row_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  row_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+  row_spec(4, bold = T, color = "gray", background = "#B9EFFF") %>%
+  row_spec(5, bold = T, color = "gray", background = "#A1E9FF") %>%
+  row_spec(6, bold = T, color = "white", background = "#49CFF7") %>%
+  row_spec(7, bold = T, color = "white", background = "#11C3F9") %>%
+  row_spec(8, bold = T, color = "white", background = "#0E9CC7") %>%
+  row_spec(9, bold = T, color = "white", background = "#147F9F") %>%
+  row_spec(10, bold = T, color = "white", background = "#156077") %>%
+  row_spec(11, bold = T, color = "white", background = "#156077") %>%
+  row_spec(12, bold = T, color = "white", background = "#156077") %>%
+  add_footnote(c("Esta es la salida del código hecho con read.table"), notation = "symbol")
+```
+
+```{r, echo=FALSE}
+tabla_vg <- data.frame(
+  Variable = c(
+    "PassengerId",
+    "Survived"
+
+  ),
+  Descripcion = c(
+    "(tipo entero) Identificación del pasajero. Ej.: 1, 2, 3...Variable continua",
+    "(tipo entero) Si sobrevivió o no. Ej.: 0, 1...  Variable dicotómica discreta."
+ 
+  ))
+
+kable(tabla_vg,caption = "TABLA RESUMEN VARIABLES DATA 'GENDER_SUBMISSION'") %>%
+  kable_styling(latex_options="scale_down", position = "left") %>%
+  row_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  row_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  add_footnote(c("Esta es la salida del código hecho con read.table"), notation = "symbol")
+```
+
+```{r, include=FALSE,echo=FALSE}
+str(data2)
+```
+
+******
+
+******
+# <b>Integración y selección de los datos de interés a analizar</b>
+Se decide juntar la base de datos de train y de test en una sola.
+
+Lo primero paso es que la data Test tenga las mismas doce variables de Train, como falta el dato de Survived, se debe realizar un join por la variable PassangerId entre Test y gender_submission, para obtener los valores de este campo Survived:
+
+```{r}
+test_12<-merge(x=data,y=data2,by="PassengerId",all.x=TRUE)
+
+#head(test_12)
+
+
+```
+
+Luego se junta las datas de test y train:
+```{r}
+
+dfj <- c()
+dfj <-rbind(test_12,data1)
+#head(dfj)
+```
+Finalmente, se muestra la información de la data unificada:
+```{r}
+summary(dfj)
+```
+
+
+******
+
+******
+# <b>Limpieza de los datos</b>
+******
+
+
+## ¿Los datos contienen ceros o elementos vacíos?
+Gracias a la función summary se responde:<br> 
+Sí, la data unificada tiene 263 datos nulos en "Age" y uno en "Fare". (campos vacíos).<br> 
+Para el tratamiento de estos NAs, se realizará la imputación con al algoritmo Gower - KNN.
+
+-----
+
+```{r, echo=FALSE,message=FALSE}
+
+index_perdidos_Age <-which(is.na(dfj$Age))
+index_perdidos_Fare <-which(is.na(dfj$Fare))
+
+dfNA <- c()
+
+dfNA <- data.frame(dfj)
+#head(dfNA)
+
+# S3 method for class 'data.frame', tomado de https://rdrr.io/cran/VIM/man/kNN.html
+dfNA <- kNN(
+  dfNA,
+  #variable = colnames(dfNA),
+  variable = c("Age","Fare"),
+  metric = NULL,
+  k = 5,
+  #dist_var = colnames(dfNA),
+  dist_var = c("Age","Fare"),
+  weights = NULL,
+  numFun = median,
+  catFun = maxCat,
+  makeNA = NULL,
+  NAcond = NULL,
+  impNA = TRUE,
+  donorcond = NULL,
+  mixed = vector(),
+  mixed.constant = NULL,
+  trace = FALSE,
+  imp_var = TRUE,
+  imp_suffix = "Imputada",
+  addRandom = FALSE,
+  useImputedDist = TRUE,
+  weightDist = FALSE
+)
+
+###Valores perdidos:
+
+tabla_vpAge <-dfNA[index_perdidos_Age,]
+tabla_vpAge <- tabla_vpAge[1:5,]
+kable(tabla_vpAge, caption = "MUESTRA DE REGISTROS IMPUTADOS POR MEDIDA GOWER PARA AGE") %>%
+  kable_styling(latex_options=c("striped", "hold_position"), position = "left") %>%
+  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+  column_spec(4, bold = T, color = "gray", background = "#A1E9FF") %>%
+   column_spec(5, bold = T, color = "gray", background = "#18D6F3") %>%
+   column_spec(6, bold = T, color = "gray", background = "#0FD8F7") %>%
+   column_spec(7, bold = T, color = "gray", background = "#03DEFF") %>%
+   column_spec(8, bold = T, color = "gray", background = "#07C0DC") %>%
+   column_spec(9, bold = T, color = "gray", background = "#13B2CA") %>%
+   column_spec(10, bold = T, color = "gray", background = "#13B2CA") %>%
+   column_spec(11, bold = T, color = "gray", background = "#13B2CA") %>%
+   column_spec(12, bold = T, color = "gray", background = "#22A6BA") %>%
+   column_spec(13, bold = T, color = "gray", background = "#22A6BA") %>%
+   column_spec(14, bold = T, color = "white", background = "#BA2246") %>%
+#  column_spec(15, bold = T, color = "gray", background = "#22A6BA") %>%
+#   column_spec(16, bold = T, color = "gray", background = "#22A6BA") %>%
+#   column_spec(17, bold = T, color = "gray", background = "#A1E9FF") %>%
+#     column_spec(18, bold = T, color = "white", background = "#BA2246") %>%
+ #  column_spec(19, bold = T, color = "gray", background = "#A1E9FF") %>%
+#   column_spec(36, bold = T, color = "white", background = "#BA2246") %>%
+     add_footnote(c("Se observa si esa fila tuvo variable imputada en columna roja"), notation = "symbol")
+
+tabla_vpFare <-dfNA[index_perdidos_Fare,]
+#dfNA<- dfNA[,1:12]
+#tabla_vpAge <- tabla_vpAge[,1:12]
+kable(tabla_vpFare, caption = "MUESTRA DE REGISTROS IMPUTADOS POR MEDIDA GOWER PARA FARE") %>%
+  kable_styling(latex_options=c("striped", "hold_position"), position = "left") %>%
+  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+  column_spec(4, bold = T, color = "gray", background = "#A1E9FF") %>%
+   column_spec(5, bold = T, color = "gray", background = "#18D6F3") %>%
+   column_spec(6, bold = T, color = "gray", background = "#0FD8F7") %>%
+   column_spec(7, bold = T, color = "gray", background = "#03DEFF") %>%
+   column_spec(8, bold = T, color = "gray", background = "#07C0DC") %>%
+   column_spec(9, bold = T, color = "gray", background = "#13B2CA") %>%
+   column_spec(10, bold = T, color = "gray", background = "#13B2CA") %>%
+   column_spec(11, bold = T, color = "gray", background = "#13B2CA") %>%
+   column_spec(12, bold = T, color = "gray", background = "#22A6BA") %>%
+   column_spec(13, bold = T, color = "gray", background = "#22A6BA") %>%
+   column_spec(14, bold = T, color = "gray", background = "#22A6BA") %>%
+   column_spec(15, bold = T, color = "white", background = "#BA2246") %>%  
+#  column_spec(15, bold = T, color = "gray", background = "#22A6BA") %>%
+#   column_spec(16, bold = T, color = "gray", background = "#22A6BA") %>%
+#   column_spec(17, bold = T, color = "gray", background = "#A1E9FF") %>%
+#     column_spec(18, bold = T, color = "white", background = "#BA2246") %>%
+ #  column_spec(19, bold = T, color = "gray", background = "#A1E9FF") %>%
+#   column_spec(36, bold = T, color = "white", background = "#BA2246") %>%
+     add_footnote(c("Se observa si esa fila tuvo variable imputada en columna roja"), notation = "symbol")
+
+
+```
+
+```{r}
+#eliminar columnas del dataframe:
+df <- c()
+df <- dfNA[, -c(13:14)] 
+#head(df)
+str(df)
+dim(df)
+```
+<b>Limpiezas iniciales </b><br>
+Se pasa las variables Pclass y Survived a factor.<br>
+Se observa la variable Cabin con números y letras y en algunos casos, un registro hasta con 5 cabinas. Se decide con regex (análisis de texto), dividir esta variable en 2: Cabin_Letra y Cabin_Numero, pues puede dar un análisis interesante más adelante. <br>
+Después de la revisión se encuentran 1020 casos NAs. Se decide no tomar esta variable para estudio.
+```{r, echo=FALSE}
+
+Datos <- c()
+Datos2 <- data.frame(df)
+
+Datos2["Cabin"] <- lapply(Datos2["Cabin"], as.character)
+
+Datos2 <- mutate(Datos2, Cabin_Letra=str_extract(Datos2$Cabin,"[A-Za-z]"),
+                 Cabin_Numero = str_extract(Datos2$Cabin,"[0-9]"))
+Datos2$Cabin_Numero <- as.numeric(Datos2$Cabin_Numero)
+
+tabla_pesos  <- sqldf('SELECT * FROM Datos2  LIMIT 2')
+
+kable(tabla_pesos,caption = "TABLA MUESTRA CON NUEVAS VARIABLES Cabin Numero y Letra") %>%
+  kable_styling(latex_options=c("striped", "hold_position"), position = "left") %>%
+  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+  column_spec(4, bold = T, color = "gray", background = "#A1E9FF") %>%
+  column_spec(5, bold = T, color = "gray", background = "#A1E9FF") %>%
+  column_spec(6, bold = T, color = "gray", background = "#A1E9FF") %>%
+  column_spec(7, bold = T, color = "gray", background = "#A1E9FF") %>%
+  column_spec(8, bold = T, color = "gray", background = "#A1E9FF") %>%
+  column_spec(9, bold = T, color = "gray", background = "#A1E9FF") %>%
+  column_spec(10, bold = T, color = "gray", background = "#A1E9FF") %>%  
+  column_spec(11, bold = T, color = "gray", background = "#A1E9FF") %>%  
+  column_spec(12, bold = T, color = "gray", background = "#22A6BA") %>%  
+  column_spec(13, bold = T, color = "white", background = "#BA2246") %>%
+  column_spec(14, bold = T, color = "white", background = "#BA2246") %>%  
+#  column_spec(15, bold = T, color = "white", background = "#BA2246") %>%
+  add_footnote(c("Se observan en rojo que los valores tomados fueron NAs."), notation = "symbol")
+
+
+#   column_spec(14, bold = T, color = "gray", background = "#22A6BA") %>%
+#   column_spec(15, bold = T, color = "white", background = "#BA2246") %>%  
+#  column_spec(15, bold = T, color = "gray", background = "#22A6BA") %>%
+#   column_spec(16, bold = T, color = "gray", background = "#22A6BA") %>%
+#   column_spec(17, bold = T, color = "gray", background = "#A1E9FF") %>%
+#     column_spec(18, bold = T, color = "white", background = "#BA2246") %>%
+ #  column_spec(19, bold = T, color = "gray", background = "#A1E9FF") %>%
+#   column_spec(36, bold = T, color = "white", background = "#BA2246") %>%
+
+
+
+
+df <- c()
+df <- data.frame(Datos2)
+
+summary(df)
+
+
+```
+
+
+## Análisis de los datos
+******
+
+<b>Resumen de datos cuantitativos</b><br>
+En el análisis inicial, no se incluye Ticket ni Cabin por demasiados NAs:
+```{r}
+res <- c("Age","SibSp","Parch","Fare" )
+mean.n <- as.vector(sapply( df[,res ],mean,na.rm=TRUE ) )
+std.n <- as.vector(sapply(df[,res ],sd, na.rm=TRUE))
+median.n <- as.vector(sapply(df[,res],median, na.rm=TRUE))
+IQR.n <- as.vector(sapply(df[,res],IQR, na.rm=TRUE))
+
+
+```
+
+```{r}
+#head(df)
+```
+
+```{r}
+id.factor <- c(12) 
+id.num <- c(5,6,7,9) 
+var.factor <- colnames(df)[id.factor] 
+var.num <- colnames(df)[id.num]
+
+variables_continuas <-  c()
+variables_continuas <-data.frame(df)
+
+resumen_vc <- function(x){
+                m <- round(mean(x),2)
+                me <- round(median(x),2)
+                q <- round(quantile(x),2)
+                n <- length(x)
+                s <- round(sd(x),2)
+                cv <- round(sd(x)/mean(x),2)
+                IQR <- IQR(x) 
+                return(c(TOTAL=n, Media=m, Mediana=me, Cuartiles=q,Intercuartilico=IQR,S=s, CV=cv))
+}
+
+VC <- c("Age","SibSp", "Parch", "Fare")
+
+tabla_vc_ve <- sapply(variables_continuas[VC], resumen_vc) 
+
+kable(tabla_vc_ve,caption = "TABLA RESUMEN VARIABLES CUANTITATIVAS REFERENTE A SURVIVED") %>%
+  kable_styling(fixed_thead = T)%>%
+  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+  column_spec(4, bold = T, color = "gray", background = "#A1E9FF") %>%
+   column_spec(5, bold = T, color = "gray", background = "#18D6F3") %>%
+    add_footnote(c("Convenciones: S:Varianza, CV:Desviación Estandar"), notation = "symbol")
+```
+
+
+La media es menor a 1 para SibSp y Parch. La mediana es cero para estas dos variables. En todas las variables (excepto Fare y Age), la estimación del valor de dispersión de desviación estandard es mayor que el IQR (Intercualitico). La variable SibSp y Age tienen un valor similar para su desviación estandard e IQR.<br>
+
+En  SibSP y Parch la desviación estándar es más grande que la media, esto probablemente indica un sesgo, es decir, la presencia de valores extremos u otra peculiaridad en la forma de la distribución, como una distribución bimodal. <br>
+La variable Age es la única cuya desviación estander es menor a 1, lo que le da una alta relevancia para ser utilizada en el modelo predictivo.
+
+El rango intercualtílico es Q3-Q1. Como entre Q3 y Q4 se distribuyen más del 50% de las observaciones centrales de las variables (excepto Age), el rango intercuartilico es una medida de la dispersión de este colectivo. Así pues, indica no normalidad.<br> La variable Age tiene una buena distribución entre los cuartiles y su CV la hace atractiva para el modelo.
+
+Se analiza la correlación entre estas variables:
+
+```{r}
+	
+#VC <- c("SibSp", "Parch", "Fare")
+M<-cor(variables_continuas[VC])
+
+corrplot(M, method="pie")
+
+```
+Según el gráfica, no hay correlación mayor al 80% para todas las variables. Sin embargo, como la desviación estandar es mayor a 1 para todas (excepto Age), se concluye dispersión alta y por lo tanto no se tomarán en cuenta para el modelo predictivo. Unicamente se tomará en cuenta Age. 
+
+
+## Identificación y tratamiento de valores extremos
+******
+```{r}
+SURVIVED <- c("Muere","Sobrevive")
+df$Survived <- factor(df$Survived, levels = c(0,1), labels=SURVIVED)
+
+ggplot(df, aes(x=Survived, y=SibSp, fill=Survived)) + 
+    geom_boxplot(alpha=0.2) +
+    theme(legend.position="none")
+
+ggplot(df, aes(x=Survived, y=Fare, fill=Survived)) + 
+    geom_boxplot(alpha=0.2) +
+    theme(legend.position="none")
+
+ggplot(df, aes(x=Survived, y=Parch, fill=Survived)) + 
+    geom_boxplot(alpha=0.2) +
+    theme(legend.position="none")
+
+ggplot(df, aes(x=Survived, y=Age, fill=Survived)) + 
+    geom_boxplot(alpha=0.2) +
+    theme(legend.position="none")
+
+
+```
+
+Después de la información encontrada, se encuentran que las variables Fare y Parch tienen muchos valores extremos (fuera de la media) y mucha dispersión como se había confirmado con el cálculo de Desviación estandar e IQR. Se muestra una relación más proporcional para la variable SibSp y Age, en cuanto a muertos y sobrevivientes. <b>Pero dado que Age tiene una desviación estándar menor a 1, se decide dejar para el modelo.</b><br>
+
+<b>Discretización </b>
+
+Se crea nueva variable de Tipo_Persona (niño, adulto, mayor) a partir de la variable Age.<br>
+
+```{r}
+# Discretizamos
+df["Tipo_Persona"] <- cut(df$Age, breaks = c(0,10,45,100), labels = c("Niño","Adulto","Mayor"))
+
+#df["Clase"] <- cut(df$Pclass, breaks = c(0,1,2,3), labels = c("1ra", "2da", "3ra"))
+#df <- subset(df, select = -c(Pclass) )
+clase <- c("1ra", "2da", "3ra")
+df$Pclass <- factor(df$Pclass, levels = c(1,2,3), labels=clase)
+
+
+
+
+filas1=dim(df)[1]
+ggplot(data=df[1:filas1,],aes(x=Survived,fill=Tipo_Persona))+geom_bar()
+
+```
+
+## Comparación de la normalidad y homogeneidad de la varianza
+R:/ Se calcula para Age:
+<p>Invertalo de confianza de la variable Age</p><br>
+Se realizará cálculo del intervalo de confianza al 95% de la variable Age.
+
+La prueba de homogeneidad es una prueba estadística inferencial utilizada para evaluar la igualdad de las varianzas para una variable calculada para dos o más grupos, algunas de las formas más utilizadas es analizarlo de forma gráfica, Dos de los métodos gráficos más empleados para el análisis homogeneidad consiste en representar los datos mediante un boxplot o un violinplot. Con ambos gráficos el objetivo es comparar la dispersión de los grupos.
+
+
+A continuación se realiza el análisis con la variable Survived y la edad
+```{r}
+ggplot(df, aes(x=Survived, y=Age, fill=Survived)) + 
+    geom_boxplot(alpha=0.2) +
+    theme(legend.position="none")
+
+```
+Del gráfico se puede concluir de que tienen una forma similar y por lo tanto se presenta homogeneidad entre los datos.
+
+
+```{r}
+
+alpha<-0.05
+n<-length(df$Age)
+n
+
+#Aplicamos el teorema del límite central ya que la muestra es superior a 30
+mean <- mean(df$Age)
+s <- sd(df$Age)
+t <- qnorm(alpha/2, lower.tail= FALSE) # normal
+#t<-qt(alpha/2,lower.tail=FALSE,df=n-1) # t-student
+li <- mean - t*s/ sqrt(n)
+ui <- mean + t*s/ sqrt(n)
+
+cat( "(" , li , ",", ui , ")")
+
+tt<-t.test(df$Age, conf.level=0.95 )
+tt
+tt$conf.int
+#attr(,"conf.level")
+
+
+
+```
+El intervalo de confianza que obtenemos es: (28.69,30.14). La media muestral es 29.41 y el p-value 2.2*10^-16. La interpretación del intervalo de confianza es que si muestreamos un número elevado de veces la población, el 95 % de los intervalos obtenidos contienen el valor del parámetro de la media de Age. 
+
+<br>
+<b>Resumen Variables cualitativas</b><br>
+Se realiza relación con base en la variable Survived:
+
+```{r}
+par(mfrow=c(2,2))
+
+factorColumns <- c("Embarked", "Sex","Tipo_Persona","Pclass")
+
+
+
+for (col in factorColumns) {
+  table <- table(df$Survived, df[[col]])
+    barplot(table, 
+            col=c("#1F77B4", "#FF7F0E"),
+            main = col)    
+    
+legend("topleft", SURVIVED, fill=c("#1F77B4","#FF7F0E"))
+}
+
+
+```
+
+# <b>Análisis de los datos</b>  
+
+## Selección de los grupos de datos que se quieren analizar/comparar (planificación de los análisis a aplicar)
+ 
+Las embarcaciones en S fueron mayoría y esta murieron más de 400 personas. <br>
+Se encontraron más hombres que mujeres viajando, pero murieron más hombres que mujeres. <br>
+Habían más personas adultas que niños o mayores(ancianos), y estos adultos fueron los que más muertos pusieron en la catástrofe.<br>
+Se encontraban más de 3ra clase en el Titanic, y fueron los que más murieron.
+
+
+```{r}
+tabla_SET <- table(df$Embarked,df$Survived)
+kable(prop.table(tabla_SET, margin = 1),caption = "TABLA CONTINGENCIA EMBARKED VS SURVIVED") %>%
+  kable_styling(fixed_thead = T)%>%
+  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+     add_footnote(c(""), notation = "symbol")
+```
+
+```{r}
+tabla_SST <- table(df$Sex, df$Survived)
+kable(prop.table(tabla_SST, margin = 1),caption = "TABLA CONTINGENCIA SEX VS SURVIVED") %>%
+  kable_styling(fixed_thead = T)%>%
+  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+     add_footnote(c(""), notation = "symbol")
+
+```
+
+```{r}
+tabla_SCT <- table(df$Pclass,df$Survived)
+kable(prop.table(tabla_SCT, margin = 1),caption = "TABLA CONTINGENCIA CLASS VS SURVIVED") %>%
+  kable_styling(fixed_thead = T)%>%
+  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+    add_footnote(c(""), notation = "symbol")
+```
+
+```{r}
+tabla_SAT <- table(df$Tipo_Persona,df$Survived)
+kable(prop.table(tabla_SAT, margin = 1),caption = "TABLA CONTINGENCIA TIPO_PERSONA VS SURVIVED") %>%
+  kable_styling(fixed_thead = T)%>%
+  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+    add_footnote(c(""), notation = "symbol")
+```
+
+
+Una alternativa interesante a las barras de diagramas, es el plot de las tablas de contingencia. Obtenemos la misma información pero para algunos receptores puede resultar más visual.  
+
+```{r}
+par(mfrow=c(1,2))
+plot(tabla_SCT, col = c("#156077","#A1E9FF"), main = "% SURVIVED vs. CLASS")
+plot(tabla_SAT, col = c("#156077","#A1E9FF"), main = "%SURVIVED vs. AGE")
+plot(tabla_SST, col = c("#156077","#A1E9FF"), main = "% SURVIVED vs. SEX")
+plot(tabla_SET, col = c("#156077","#A1E9FF"), main = "% SURVIVED vs. EMBARKED")
+```
+
+
+## Aplicación de pruebas estadísticas para comparar los grupos de datos. 
+En función de los datos y el objetivo de estudio, aplicar pruebas de contraste de hipótesis, correlaciones, regresiones, etc. Aplicar al menos tres métodos de análisis diferentes.  
+R/: Se realiza: correlación, cálculo intervalo de confianza, Knn,tabla de contingencia, modelo predictivo de decisión.
+
+Nuestro objetivo es crear un árbol de decisión que permita analizar qué tipo de pasajero del Titanic tenía probabilidades de sobrevivir o no. Por lo tanto, la variable por la que clasificaremos es el campo de si el pasajero sobrevivió o no. De todas maneras, al imprimir las primeras (con head) y últimas 10 (con tail) filas nos damos cuenta de que los datos están ordenados.
+
+
+```{r}
+#VA <- c("Pclass", "Embarked","Sex","Tipo_Persona","Survived")
+VA <- c("Pclass","Sex","Tipo_Persona","Survived")
+df1 <- c()
+df1 <- df[,VA]
+
+set.seed(1)
+data_random <- df1[sample(nrow(df1)),]
+###empieza modelo##
+set.seed(666)
+y <- data_random[,4] 
+X <- data_random[,1:3]
+summary(y)
+summary(X)
+```
+<b>Nueva data test y train</b>:<br>
+Elegimos el subconjunto de entrenamiento y de prueba calculando cuántas filas corresponde dos tercios de los datos (2*1309/3=872) y dividimos el conjunto:
+```{r}
+trainX <- X[1:872,]
+trainy <- y[1:872]
+testX <- X[873:1309,]
+testy <- y[873:1309]
+
+dim(trainX)
+dim(trainy)
+dim(testX)
+dim(testy)
+
+#indexes = sample(1:nrow(df1), size=floor((2/3)*nrow(df1)))
+#trainX<-X[indexes,]
+#trainy<-y[indexes]
+#testX<-X[-indexes,]
+#testy<-y[-indexes]
+
+
+```
+
+<b>Creación del modelo, calidad del modelo y extracción de reglas<b>
+```{r}
+
+summary(trainy)
+trainy = as.factor(trainy)
+model <- C50::C5.0(trainX, trainy,rules=TRUE )
+summary(model)
+```
+
+Errores: se muestra el número y porcentaje de casos mal clasificados en el subconjunto de entrenamiento. El árbol obtenido clasifica erróneamente 134 de los 873 casos dados, una tasa de error del 15.4%.  
+ 
+A partir del árbol de decisión de dos hojas que hemos modelado, se pueden extraer las siguientes reglas de decisión (gracias a rules=TRUE podemos imprimir las reglas directamente):  
+ 
+SEX = “Hombre”(male) → Muere. Validez: 86.5%  
+SEX = “Mujer”(female) → Sobrevive. Validez: 80.9%  
+
+
+
+
+******
+# <b>Representación de los resultados a partir de gráficas y tablas</b>
+
+```{r}
+
+model <- C50::C5.0(trainX, trainy)
+plot(model)
+
+```
+******
+
+
+Validación del modelo con los datos reservados
+Una vez tenemos el modelo, podemos comprobar su calidad prediciendo la clase para los datos de prueba que nos hemos reservado al principio.
+
+```{r}
+
+predicted_model <- predict( model, testX, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+
+
+Cuando hay pocas clases, la calidad de la predicción se puede analizar mediante una matriz de confusión que identifica los tipos de errores cometidos.
+```{r}
+#####SALIA#####
+mat_conf<-table(testy,Predicted=predicted_model)
+mat_conf
+
+```
+
+Además, tenemos a nuestra disposición el paquete gmodels para obtener información más completa:
+```{r}
+if(!require(gmodels)){
+    install.packages('gmodels', repos='http://cran.us.r-project.org')
+    library(gmodels)
+}
+
+CrossTable(testy, predicted_model,prop.chisq  = FALSE, prop.c = FALSE, prop.r =FALSE,dnn = c('Reality', 'Prediction'))
+```
+
+
+
+******
+# <b>Resolución del problema</b>
+A partir de los resultados obtenidos, ¿cuales son las conclusiones? Los resultados permiten responder el problema?
+R:/ Adicional a las conclusiones a lo largo de la realización de la PEC podemos concluir que: <br>
+ 
+Los hombres tienen un 86.5% de posibilidad de morir.<br>
+Las mujeres tienen más posibilidades de sobrevivir (80.9%)<br>
+ 
+Por tanto podemos concluir que “las mujeres primero que los hombres”.<br>
+ 
+Las distintas embarcaciones C,Q y S mostraron un rango entre el 50% y 66% en mortalidad.<br>
+ 
+La 3ra clase es la que murió más 73% y la 1ra la que menos (42%). Conclusión: la posición social tiene privilegios.<br>
+ 
+Los niños primero (sobrevivieron 45.15% del total de pasajeros), frente a un 63% de adultos y 63.09% de adultos mayores.<br>
+ 
+La precisión del árbol es de 78.20% para predecir por sexo cómo se podía comportar la supervivencia.<br>
+ 
+En la predicción sobreviven un poco menos de la mitad (166 contra 277)
+
+
+******
+
+
+
+******
+# <b> Código</b>
+******
+* Adjuntar el código, preferiblemente en R.
+
+En esta sesión se exportan los datos preparados para el entrenamiento del modelo.
+
+```{r}
+write.csv(df1,"D:\\UOC\\9. Tipología y Ciclo de vida de los datos\\PRA2\\Entrega\\DatosFinales.csv", row.names = FALSE)
+```
+
+**Link con código en repositorio GIT**  
+https://github.com/diegoquintero424/PRA2_Limpieza-y-analisis-de-datos  
+
+
+**Link del video en google drive**  
+https://drive.google.com/file/d/1c8itVL0yoo23qeZ7QAZPz7JXkBREjthj/view?ts=61d3c3b8
+
+
+******
+# <b> Contribución de participantes</b>
+******
+
+| Contribuciones                           | Firma    |
+|------------------------------------------|----------|
+| 1. Descripción del dataset               | DQ, AP   |
+| 2. Integración y selección de los datos  | DQ, AP   |
+| 3. Limpieza de los datos.                | DQ, AP   |
+| 4. Análisis de los datos.                | DQ, AP   |
+| 5. Representación de los resultados      | DQ, AP   |
+| 6. Resolución del problema               | DQ, AP   |
+| 7. Código                                | DQ, AP   |
+| 8. video y presentación                  | DQ, AP   |
+
+
+**Iniciales:**  
+**AP:** Adrian Felipe Pinzon Hurtado  
+**DQ:** Diego Armando Quintero Quiñones  
+
+
+# <b> Fuentes
+ 
+https://www.cienciadedatos.net/documentos/9_homogeneidad_de_varianza_homocedasticidad.html#:~:text=El%20supuesto%20de%20homogeneidad%20de,es%20decir%2C%20entre%20diferentes%20grupos.
+<br>
+Luis Carlos Molina Félix, Ramon Sangüesa i Solé, "Evaluación de modelos", PID_00165734, Minería de Datos, Biblioteca UOC
